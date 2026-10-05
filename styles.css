@@ -566,17 +566,99 @@ pre {
     cursor: pointer;
 }
 
-#customPabxList {
-    margin-top: 25px;
+.pabx-list-section {
+    margin-top: 6px;
     padding-top: 22px;
     border-top: 1px solid var(--loomy-line);
 }
 
-#customPabxList > label {
-    margin-bottom: 10px;
+.pabx-list-section > label {
     color: var(--loomy-muted) !important;
     font-size: 0.62rem;
     letter-spacing: 0.12em;
+}
+
+#customPabxList {
+    max-height: 420px;
+    margin-top: 10px;
+    padding-right: 4px;
+    overflow-y: auto;
+    overscroll-behavior: contain;
+}
+
+.pabx-list-empty {
+    padding: 18px 0;
+    color: var(--loomy-muted);
+    font-size: 0.8rem;
+    text-align: center;
+}
+
+.pabx-badge {
+    display: inline-block;
+    margin-left: 8px;
+    padding: 2px 7px;
+    border-radius: 999px;
+    font-size: 0.56rem;
+    font-weight: 800;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    vertical-align: middle;
+}
+
+.pabx-badge-edited {
+    color: #7a5a00;
+    background: #fff1c2;
+}
+
+.pabx-badge-added {
+    color: var(--loomy-green-dark);
+    background: rgba(166, 254, 31, 0.28);
+}
+
+.pabx-restore {
+    color: #8a6a00;
+}
+
+.pabx-restore:hover {
+    border-color: #f0dc9a;
+    background: #fff8e0;
+}
+
+.field-label-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 10px;
+}
+
+.inline-edit-btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    padding: 3px 9px;
+    border: 1px solid var(--loomy-line);
+    border-radius: 999px;
+    color: var(--loomy-green-dark);
+    background: var(--loomy-surface);
+    font-size: 0.66rem;
+    font-weight: 700;
+    cursor: pointer;
+    transition: background 160ms ease, border-color 160ms ease;
+}
+
+.inline-edit-btn:hover {
+    border-color: var(--loomy-green-dark);
+    background: rgba(166, 254, 31, 0.18);
+}
+
+.inline-edit-btn.hidden {
+    display: none;
+}
+
+#newCondominioName[readonly] {
+    color: var(--loomy-muted);
+    background: #f4f5f2;
+    cursor: not-allowed;
 }
 
 #customPabxList > div {

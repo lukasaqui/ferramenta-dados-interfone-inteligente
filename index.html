@@ -33,8 +33,8 @@
                 </button>
                 <button id="showAddPabxBtn" class="tool-tab" type="button" aria-pressed="false">
                     <span class="tool-index">02</span>
-                    <i data-feather="plus-circle" class="h-4 w-4"></i>
-                    ADICIONAR PABX
+                    <i data-feather="server" class="h-4 w-4"></i>
+                    GERENCIAR PABX
                 </button>
             </nav>
 
@@ -53,7 +53,13 @@
         <div class="form-stack space-y-4">
             <!-- Novo Campo de Busca de Condomínio -->
             <div class="relative">
-                <label for="condominioSearch" class="block text-sm font-medium text-gray-700">Condomínio</label>
+                <div class="field-label-row">
+                    <label for="condominioSearch" class="block text-sm font-medium text-gray-700">Condomínio</label>
+                    <button type="button" id="editSelectedPabxBtn" class="inline-edit-btn hidden">
+                        <i data-feather="edit-2" class="h-3 w-3"></i>
+                        Editar PABX
+                    </button>
+                </div>
                 <input type="text" id="condominioSearch" autocomplete="off" class="mt-1 block w-full px-3 py-2 bg-white border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm" placeholder="Digite para buscar">
                 <input type="hidden" id="condominioSelected" value="">
                 
@@ -251,7 +257,11 @@
                 </button>
             </div>
 
-            <div id="customPabxList" class="hidden pt-4 space-y-2"></div>
+            <div class="pabx-list-section">
+                <label id="pabxListTitle" for="pabxListSearch" class="block text-xs font-bold text-gray-500 uppercase tracking-wider">PABX cadastrados</label>
+                <input type="search" id="pabxListSearch" autocomplete="off" class="mt-2 block w-full px-3 py-2 bg-white border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm" placeholder="Buscar PABX para editar">
+                <div id="customPabxList" class="space-y-2"></div>
+            </div>
         </section>
         </div>
     </main>
@@ -367,6 +377,10 @@
         ['newPasswordLogic', 'newPontoFormat'].forEach(id => {
             document.getElementById(id).addEventListener('change', updatePasswordFields);
         });
+        document.getElementById('pabxListSearch').addEventListener('input', renderCustomPabxList);
+        document.getElementById('editSelectedPabxBtn').addEventListener('click', () => {
+            startEditPabx(document.getElementById('condominioSelected').value);
+        });
         document.querySelectorAll('.token-chip').forEach(chip => {
             chip.addEventListener('click', () => insertTemplateToken(chip.dataset.token));
         });
@@ -451,34 +465,56 @@
     }
 
     // --- EDIÇÃO DE PABX ---
+    function isBuiltinPabx(name) {
+        return Object.prototype.hasOwnProperty.call(CONDOMINIOS_CONFIG, name);
+    }
+
+    // 'builtin' = original do código, 'edited' = original com alterações locais, 'added' = criado na ferramenta
+    function getPabxOrigin(name, customConfig = loadCustomCondominios()) {
+        const isCustom = Object.prototype.hasOwnProperty.call(customConfig, name);
+        if (isBuiltinPabx(name)) return isCustom ? 'edited' : 'builtin';
+        return 'added';
+    }
+
     function setPabxFormMode(editingName) {
         const isEditing = Boolean(editingName);
+        const nameInput = document.getElementById('newCondominioName');
         document.getElementById('editingPabxName').value = editingName || '';
         document.getElementById('pabxFormTitle').textContent = isEditing ? `Editar ${editingName}` : 'Adicionar novo PABX';
         document.getElementById('addPabxBtnText').textContent = isEditing ? 'SALVAR ALTERAÇÕES' : 'SALVAR PABX';
         document.getElementById('cancelAddPabxBtnText').textContent = isEditing ? 'CANCELAR EDIÇÃO' : 'VOLTAR';
+        // PABX originais não podem ser renomeados (o nome é a chave do cadastro)
+        nameInput.readOnly = isEditing && isBuiltinPabx(editingName);
+        nameInput.title = nameInput.readOnly ? 'PABX original: o nome não pode ser alterado' : '';
         document.querySelectorAll('#customPabxList > div').forEach(item => {
             item.classList.toggle('is-editing', item.dataset.name === editingName);
         });
     }
 
     function startEditPabx(name) {
-        const config = loadCustomCondominios()[name];
+        const config = getCondominiosConfig()[name];
         if (!config) return;
 
+        showAddPabxPage();
         document.getElementById('newCondominioName').value = name;
         document.getElementById('newPabxUrl').value = config.pabx || '';
         document.getElementById('newDomain').value = config.domain || '';
         document.getElementById('newPasswordPrefix').value = config.password_prefix || '';
         document.getElementById('newPasswordLogic').value = config.password_logic || 'standard';
         document.getElementById('newPasswordTemplate').value = config.password_template || '';
-        document.getElementById('newPontoFormat').value = config.ponto_format === 'zero_padded' ? 'zero_padded' : 'normal';
-        document.getElementById('newWarningMessage').value = config.warning_message || '';
+        document.getElementById('newPontoFormat').value = formatPonto(name, config, '1') === '01' ? 'zero_padded' : 'normal';
+        document.getElementById('newWarningMessage').value = getWarningMessage(name, config);
 
         setPabxFormMode(name);
         updatePasswordFields();
         document.getElementById('pabxFormTitle').scrollIntoView({ behavior: 'smooth', block: 'start' });
-        document.getElementById('newCondominioName').focus({ preventScroll: true });
+        document.getElementById('newPabxUrl').focus({ preventScroll: true });
+    }
+
+    function updateEditSelectedButton() {
+        const selected = document.getElementById('condominioSelected').value;
+        const exists = Boolean(selected && getCondominiosConfig()[selected]);
+        document.getElementById('editSelectedPabxBtn').classList.toggle('hidden', !exists);
     }
 
     function cancelPabxForm() {
@@ -491,7 +527,11 @@
 
     // --- PADRÃO DE SENHA ---
     function formatPonto(condominioName, config, pontoRaw) {
-        if (config.ponto_format === 'zero_padded' || condominioName === "RESERVA BARRA FUNDA" || condominioName === "SERRA MORENA") {
+        // Formato salvo na edição tem prioridade; sem ele, vale a regra antiga por nome
+        const zeroPadded = config.ponto_format
+            ? config.ponto_format === 'zero_padded'
+            : ["RESERVA BARRA FUNDA", "SERRA MORENA"].includes(condominioName);
+        if (zeroPadded) {
             // Se for 1 vira 01, se for 2 vira 02.
             return pontoRaw.length === 1 ? `0${pontoRaw}` : pontoRaw;
         }
@@ -592,8 +632,8 @@
 
         const customConfig = loadCustomCondominios();
 
-        if (name !== editingName && customConfig[name]) {
-            showMessage(`Ja existe um PABX adicionado com o nome ${name}.`, 'error');
+        if (name !== editingName && getCondominiosConfig()[name]) {
+            showMessage(`Ja existe um PABX com o nome ${name}. Use o botao de editar.`, 'error');
             return;
         }
 
@@ -601,23 +641,18 @@
             delete customConfig[editingName];
         }
 
+        // ponto_format e warning_message são sempre salvos para sobrepor as regras antigas por nome
         customConfig[name] = {
             pabx,
             domain,
             password_prefix: passwordPrefix,
-            password_logic: passwordLogic
+            password_logic: passwordLogic,
+            ponto_format: pontoFormat,
+            warning_message: warningMessage
         };
 
         if (passwordLogic === 'template') {
             customConfig[name].password_template = passwordTemplate;
-        }
-
-        if (pontoFormat === 'zero_padded') {
-            customConfig[name].ponto_format = 'zero_padded';
-        }
-
-        if (warningMessage) {
-            customConfig[name].warning_message = warningMessage;
         }
 
         if (!saveCustomCondominios(customConfig)) return;
@@ -630,6 +665,7 @@
 
         clearAddPabxForm();
         renderCustomPabxList();
+        updateEditSelectedButton();
 
         if (editingName) {
             showMessage('PABX atualizado.', 'success');
@@ -640,15 +676,20 @@
         showMessage('PABX adicionado a lista.', 'success');
     }
 
+    // Remove um PABX adicionado ou desfaz as alterações locais de um PABX original
     function removeCustomPabx(name) {
-        if (!confirm(`Remover o PABX ${name}?`)) return;
+        const isRestore = getPabxOrigin(name) === 'edited';
+        const question = isRestore
+            ? `Restaurar os dados originais de ${name}? As alteracoes feitas serao perdidas.`
+            : `Remover o PABX ${name}?`;
+        if (!confirm(question)) return;
 
         const customConfig = loadCustomCondominios();
         delete customConfig[name];
 
         if (!saveCustomCondominios(customConfig)) return;
 
-        if (document.getElementById('condominioSelected').value === name) {
+        if (!isRestore && document.getElementById('condominioSelected').value === name) {
             document.getElementById('condominioSearch').value = '';
             document.getElementById('condominioSelected').value = '';
         }
@@ -658,31 +699,49 @@
         }
 
         renderCustomPabxList();
-        showMessage('PABX removido da lista.', 'success');
+        updateEditSelectedButton();
+        showMessage(isRestore ? 'Dados originais restaurados.' : 'PABX removido da lista.', 'success');
+    }
+
+    function createPabxActionButton(kind, icon, label, onClick) {
+        const button = document.createElement('button');
+        button.type = 'button';
+        button.className = `pabx-action pabx-${kind}`;
+        button.title = label;
+        button.setAttribute('aria-label', label);
+        button.innerHTML = `<i data-feather="${icon}" class="h-4 w-4"></i>`;
+        button.addEventListener('click', onClick);
+        return button;
     }
 
     function renderCustomPabxList() {
         const listContainer = document.getElementById('customPabxList');
         const customConfig = loadCustomCondominios();
-        const names = Object.keys(customConfig).sort();
+        const allConfig = getCondominiosConfig();
+        const allNames = Object.keys(allConfig).sort((a, b) => a.localeCompare(b, 'pt-BR'));
+        const normalize = (text) => text.normalize("NFD").replace(/[̀-ͯ]/g, "").toLowerCase();
+        const filter = normalize(document.getElementById('pabxListSearch').value.trim());
+        const names = allNames.filter(name => !filter || normalize(`${name} ${allConfig[name].domain || ''}`).includes(filter));
+        const editingName = document.getElementById('editingPabxName').value;
+        const badgeLabels = { edited: 'Editado', added: 'Adicionado' };
 
+        document.getElementById('pabxListTitle').textContent = `PABX cadastrados (${allNames.length})`;
         listContainer.innerHTML = '';
 
         if (names.length === 0) {
-            listContainer.classList.add('hidden');
+            const empty = document.createElement('p');
+            empty.className = 'pabx-list-empty';
+            empty.textContent = 'Nenhum PABX encontrado.';
+            listContainer.appendChild(empty);
             return;
         }
 
-        const title = document.createElement('label');
-        title.className = 'block text-xs font-bold text-gray-500 uppercase tracking-wider';
-        title.textContent = 'PABX adicionados';
-        listContainer.appendChild(title);
-
         names.forEach(name => {
+            const origin = getPabxOrigin(name, customConfig);
             const item = document.createElement('div');
             item.className = 'flex items-center justify-between gap-3 bg-gray-50 border border-gray-200 rounded-md px-3 py-2';
             item.dataset.name = name;
-            item.classList.toggle('is-editing', document.getElementById('editingPabxName').value === name);
+            item.classList.toggle('is-editing', editingName === name);
 
             const textWrapper = document.createElement('div');
             textWrapper.className = 'min-w-0';
@@ -691,39 +750,34 @@
             itemName.className = 'font-bold text-sm text-gray-800 truncate';
             itemName.textContent = name;
 
+            if (badgeLabels[origin]) {
+                const badge = document.createElement('span');
+                badge.className = `pabx-badge pabx-badge-${origin}`;
+                badge.textContent = badgeLabels[origin];
+                itemName.appendChild(badge);
+            }
+
             const itemDomain = document.createElement('p');
             itemDomain.className = 'text-xs text-gray-500 truncate';
-            itemDomain.textContent = customConfig[name].domain || '';
+            itemDomain.textContent = allConfig[name].domain || '';
 
             const actions = document.createElement('div');
             actions.className = 'pabx-actions';
+            actions.appendChild(createPabxActionButton('edit', 'edit-2', `Editar ${name}`, () => startEditPabx(name)));
 
-            const editButton = document.createElement('button');
-            editButton.type = 'button';
-            editButton.className = 'pabx-action pabx-edit';
-            editButton.title = 'Editar';
-            editButton.setAttribute('aria-label', `Editar ${name}`);
-            editButton.innerHTML = '<i data-feather="edit-2" class="h-4 w-4"></i>';
-            editButton.addEventListener('click', () => startEditPabx(name));
-
-            const removeButton = document.createElement('button');
-            removeButton.type = 'button';
-            removeButton.className = 'pabx-action pabx-remove';
-            removeButton.title = 'Remover';
-            removeButton.setAttribute('aria-label', `Remover ${name}`);
-            removeButton.innerHTML = '<i data-feather="trash-2" class="h-4 w-4"></i>';
-            removeButton.addEventListener('click', () => removeCustomPabx(name));
+            if (origin === 'edited') {
+                actions.appendChild(createPabxActionButton('restore', 'rotate-ccw', `Restaurar dados originais de ${name}`, () => removeCustomPabx(name)));
+            } else if (origin === 'added') {
+                actions.appendChild(createPabxActionButton('remove', 'trash-2', `Remover ${name}`, () => removeCustomPabx(name)));
+            }
 
             textWrapper.appendChild(itemName);
             textWrapper.appendChild(itemDomain);
-            actions.appendChild(editButton);
-            actions.appendChild(removeButton);
             item.appendChild(textWrapper);
             item.appendChild(actions);
             listContainer.appendChild(item);
         });
 
-        listContainer.classList.remove('hidden');
         feather.replace();
     }
 
@@ -759,6 +813,7 @@
                         hiddenInput.value = name;
                         list.classList.add('hidden');
                         checkSpecialWarnings(name); // Verifica avisos imediatos se necessário
+                        updateEditSelectedButton();
                     });
                     list.appendChild(li);
                 });
@@ -768,6 +823,7 @@
         input.addEventListener('input', (e) => {
             const val = e.target.value;
             hiddenInput.value = ""; // Limpa seleção se usuário digitar algo novo
+            updateEditSelectedButton();
             list.classList.remove('hidden');
             renderList(val);
         });
@@ -788,6 +844,7 @@
                 } else {
                     hiddenInput.value = input.value;
                 }
+                updateEditSelectedButton();
             }
         });
     }
@@ -801,6 +858,7 @@
         showGeneratorPage();
         document.getElementById('condominioSearch').value = '';
         document.getElementById('condominioSelected').value = '';
+        updateEditSelectedButton();
         document.getElementById('nomeCompleto').value = '';
         document.getElementById('bloco').value = '';
         document.getElementById('apartamento').value = '';
@@ -850,7 +908,8 @@
     }
 
     function getWarningMessage(condominioName, config) {
-        if (config.warning_message) {
+        // Alerta salvo na edição (mesmo vazio) tem prioridade sobre as regras antigas por nome
+        if (typeof config.warning_message === 'string') {
             return config.warning_message;
         }
 

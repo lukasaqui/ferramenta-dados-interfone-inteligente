@@ -586,8 +586,106 @@ pre {
     background: #f6f7f4 !important;
 }
 
-#customPabxList button {
-    color: var(--loomy-danger) !important;
+#customPabxList > div.is-editing {
+    border-color: var(--loomy-green-dark) !important;
+    background: rgba(166, 254, 31, 0.12) !important;
+    box-shadow: inset 3px 0 0 var(--loomy-green-dark);
+}
+
+.pabx-actions {
+    display: flex;
+    flex-shrink: 0;
+    gap: 4px;
+}
+
+.pabx-action {
+    display: inline-flex;
+    width: 34px;
+    height: 34px;
+    align-items: center;
+    justify-content: center;
+    border: 1px solid transparent;
+    border-radius: 9px;
+    background: transparent;
+    cursor: pointer;
+    transition: background 160ms ease, border-color 160ms ease;
+}
+
+.pabx-edit {
+    color: var(--loomy-gray);
+}
+
+.pabx-edit:hover {
+    border-color: var(--loomy-line);
+    background: var(--loomy-surface);
+    color: var(--loomy-green-dark);
+}
+
+.pabx-remove {
+    color: var(--loomy-danger);
+}
+
+.pabx-remove:hover {
+    border-color: rgba(182, 58, 58, 0.25);
+    background: rgba(182, 58, 58, 0.08);
+}
+
+.pabx-action:focus-visible,
+.token-chip:focus-visible {
+    outline: 3px solid rgba(74, 133, 38, 0.35);
+    outline-offset: 2px;
+}
+
+.token-chips {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+    margin-top: 8px;
+}
+
+.token-chip {
+    padding: 5px 9px;
+    border: 1px solid var(--loomy-line);
+    border-radius: 999px;
+    color: var(--loomy-gray);
+    background: #f6f7f4;
+    font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+    font-size: 0.7rem;
+    cursor: pointer;
+    transition: background 160ms ease, border-color 160ms ease;
+}
+
+.token-chip:hover {
+    border-color: var(--loomy-green-dark);
+    background: rgba(166, 254, 31, 0.18);
+    color: var(--loomy-ink);
+}
+
+.password-preview {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: 6px 12px;
+    padding: 12px 14px;
+    border: 1px dashed var(--loomy-line);
+    border-radius: 10px;
+    background: #f6f7f4;
+}
+
+.password-preview-label {
+    color: var(--loomy-muted);
+    font-size: 0.62rem;
+    font-weight: 700;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+}
+
+#passwordPreviewValue {
+    color: var(--loomy-ink);
+    font-size: 0.85rem;
+    font-weight: 600;
+    word-break: break-all;
 }
 
 #addPabxPage:not(.hidden) {

@@ -174,10 +174,12 @@
             <div class="section-heading">
                 <div>
                     <span class="section-kicker">Base local</span>
-                    <h2>Adicionar novo PABX</h2>
+                    <h2 id="pabxFormTitle">Adicionar novo PABX</h2>
                 </div>
                 <span class="section-step">02 / 02</span>
             </div>
+
+            <input type="hidden" id="editingPabxName" value="">
 
             <div>
                 <label for="newCondominioName" class="block text-sm font-medium text-gray-700">Nome do condomínio</label>
@@ -195,7 +197,7 @@
             </div>
 
             <div>
-                <label for="newPasswordPrefix" class="block text-sm font-medium text-gray-700">Prefixo da senha ou senha fixa</label>
+                <label for="newPasswordPrefix" id="newPasswordPrefixLabel" class="block text-sm font-medium text-gray-700">Prefixo da senha</label>
                 <input type="text" id="newPasswordPrefix" class="mt-1 block w-full px-3 py-2 bg-white border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm" placeholder="Ex: rmt@condominio">
             </div>
 
@@ -205,6 +207,7 @@
                     <select id="newPasswordLogic" class="mt-1 block w-full px-3 py-2 bg-white border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm">
                         <option value="standard">Prefixo + bloco + apto + ponto</option>
                         <option value="fixed">Senha fixa</option>
+                        <option value="template">Padrão personalizado</option>
                     </select>
                 </div>
                 <div>
@@ -216,6 +219,22 @@
                 </div>
             </div>
 
+            <div id="passwordTemplateGroup" class="hidden">
+                <label for="newPasswordTemplate" class="block text-sm font-medium text-gray-700">Padrão da senha</label>
+                <input type="text" id="newPasswordTemplate" autocomplete="off" spellcheck="false" class="mt-1 block w-full px-3 py-2 bg-white border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm font-mono" placeholder="{prefixo}{bloco}{apto}{ponto}">
+                <div class="token-chips" aria-label="Inserir campo no padrão">
+                    <button type="button" class="token-chip" data-token="{prefixo}">{prefixo}</button>
+                    <button type="button" class="token-chip" data-token="{bloco}">{bloco}</button>
+                    <button type="button" class="token-chip" data-token="{apto}">{apto}</button>
+                    <button type="button" class="token-chip" data-token="{ponto}">{ponto}</button>
+                </div>
+            </div>
+
+            <div class="password-preview">
+                <span class="password-preview-label">Exemplo · bloco 01, apto 101, 1º ponto</span>
+                <code id="passwordPreviewValue">—</code>
+            </div>
+
             <div>
                 <label for="newWarningMessage" class="block text-sm font-medium text-gray-700">Alerta especial</label>
                 <input type="text" id="newWarningMessage" class="mt-1 block w-full px-3 py-2 bg-white border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm" placeholder="Opcional">
@@ -224,11 +243,11 @@
             <div class="grid grid-cols-1 sm:grid-cols-2 gap-2 pt-2">
                 <button id="addPabxBtn" class="flex items-center justify-center bg-blue-600 text-white py-2 px-4 rounded-md shadow-sm hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 transition-colors duration-200 font-bold">
                     <i data-feather="save" class="mr-2 h-4 w-4"></i>
-                    SALVAR PABX
+                    <span id="addPabxBtnText">SALVAR PABX</span>
                 </button>
                 <button id="cancelAddPabxBtn" class="flex items-center justify-center bg-gray-100 text-gray-700 py-2 px-4 rounded-md border border-gray-300 hover:bg-gray-200 transition-colors duration-200 font-bold">
                     <i data-feather="arrow-left" class="mr-2 h-4 w-4"></i>
-                    VOLTAR
+                    <span id="cancelAddPabxBtnText">VOLTAR</span>
                 </button>
             </div>
 
@@ -339,8 +358,19 @@
         document.getElementById('headerTitle').addEventListener('click', resetUI);
         document.getElementById('showGeneratorBtn').addEventListener('click', showGeneratorPage);
         document.getElementById('showAddPabxBtn').addEventListener('click', showAddPabxPage);
-        document.getElementById('addPabxBtn').addEventListener('click', addCustomPabx);
-        document.getElementById('cancelAddPabxBtn').addEventListener('click', showGeneratorPage);
+        document.getElementById('addPabxBtn').addEventListener('click', saveCustomPabx);
+        document.getElementById('cancelAddPabxBtn').addEventListener('click', cancelPabxForm);
+
+        ['newPasswordPrefix', 'newPasswordTemplate'].forEach(id => {
+            document.getElementById(id).addEventListener('input', updatePasswordPreview);
+        });
+        ['newPasswordLogic', 'newPontoFormat'].forEach(id => {
+            document.getElementById(id).addEventListener('change', updatePasswordFields);
+        });
+        document.querySelectorAll('.token-chip').forEach(chip => {
+            chip.addEventListener('click', () => insertTemplateToken(chip.dataset.token));
+        });
+        updatePasswordFields();
 
         document.querySelectorAll('.copy-btn').forEach(button => {
             button.addEventListener('click', (event) => {
@@ -414,20 +444,144 @@
         document.getElementById('newPasswordPrefix').value = '';
         document.getElementById('newPasswordLogic').value = 'standard';
         document.getElementById('newPontoFormat').value = 'normal';
+        document.getElementById('newPasswordTemplate').value = '';
         document.getElementById('newWarningMessage').value = '';
+        setPabxFormMode(null);
+        updatePasswordFields();
     }
 
-    function addCustomPabx() {
+    // --- EDIÇÃO DE PABX ---
+    function setPabxFormMode(editingName) {
+        const isEditing = Boolean(editingName);
+        document.getElementById('editingPabxName').value = editingName || '';
+        document.getElementById('pabxFormTitle').textContent = isEditing ? `Editar ${editingName}` : 'Adicionar novo PABX';
+        document.getElementById('addPabxBtnText').textContent = isEditing ? 'SALVAR ALTERAÇÕES' : 'SALVAR PABX';
+        document.getElementById('cancelAddPabxBtnText').textContent = isEditing ? 'CANCELAR EDIÇÃO' : 'VOLTAR';
+        document.querySelectorAll('#customPabxList > div').forEach(item => {
+            item.classList.toggle('is-editing', item.dataset.name === editingName);
+        });
+    }
+
+    function startEditPabx(name) {
+        const config = loadCustomCondominios()[name];
+        if (!config) return;
+
+        document.getElementById('newCondominioName').value = name;
+        document.getElementById('newPabxUrl').value = config.pabx || '';
+        document.getElementById('newDomain').value = config.domain || '';
+        document.getElementById('newPasswordPrefix').value = config.password_prefix || '';
+        document.getElementById('newPasswordLogic').value = config.password_logic || 'standard';
+        document.getElementById('newPasswordTemplate').value = config.password_template || '';
+        document.getElementById('newPontoFormat').value = config.ponto_format === 'zero_padded' ? 'zero_padded' : 'normal';
+        document.getElementById('newWarningMessage').value = config.warning_message || '';
+
+        setPabxFormMode(name);
+        updatePasswordFields();
+        document.getElementById('pabxFormTitle').scrollIntoView({ behavior: 'smooth', block: 'start' });
+        document.getElementById('newCondominioName').focus({ preventScroll: true });
+    }
+
+    function cancelPabxForm() {
+        if (document.getElementById('editingPabxName').value) {
+            clearAddPabxForm();
+            return;
+        }
+        showGeneratorPage();
+    }
+
+    // --- PADRÃO DE SENHA ---
+    function formatPonto(condominioName, config, pontoRaw) {
+        if (config.ponto_format === 'zero_padded' || condominioName === "RESERVA BARRA FUNDA" || condominioName === "SERRA MORENA") {
+            // Se for 1 vira 01, se for 2 vira 02.
+            return pontoRaw.length === 1 ? `0${pontoRaw}` : pontoRaw;
+        }
+        return pontoRaw;
+    }
+
+    function buildPassword(config, bloco, apartamento, ponto) {
+        const prefix = config.password_prefix || '';
+        switch (config.password_logic) {
+            case 'fixed':
+                return prefix;
+            case 'template':
+                return (config.password_template || '')
+                    .replace(/\{prefixo\}/gi, prefix)
+                    .replace(/\{bloco\}/gi, bloco)
+                    .replace(/\{apto\}/gi, apartamento)
+                    .replace(/\{ponto\}/gi, ponto);
+            default:
+                return `${prefix}${bloco}${apartamento}${ponto}`;
+        }
+    }
+
+    function readPasswordForm() {
+        return {
+            password_prefix: document.getElementById('newPasswordPrefix').value.trim(),
+            password_logic: document.getElementById('newPasswordLogic').value,
+            password_template: document.getElementById('newPasswordTemplate').value.trim(),
+            ponto_format: document.getElementById('newPontoFormat').value
+        };
+    }
+
+    function updatePasswordFields() {
+        const logic = document.getElementById('newPasswordLogic').value;
+        const prefixLabels = {
+            standard: 'Prefixo da senha',
+            fixed: 'Senha fixa',
+            template: 'Prefixo (usado em {prefixo})'
+        };
+        document.getElementById('newPasswordPrefixLabel').textContent = prefixLabels[logic] || prefixLabels.standard;
+        document.getElementById('passwordTemplateGroup').classList.toggle('hidden', logic !== 'template');
+
+        const templateInput = document.getElementById('newPasswordTemplate');
+        if (logic === 'template' && !templateInput.value.trim()) {
+            templateInput.value = '{prefixo}{bloco}{apto}{ponto}';
+        }
+        updatePasswordPreview();
+    }
+
+    function updatePasswordPreview() {
+        const config = readPasswordForm();
+        const ponto = formatPonto('', config, '1');
+        const preview = buildPassword(config, '01', '101', ponto);
+        document.getElementById('passwordPreviewValue').textContent = preview || '—';
+    }
+
+    function insertTemplateToken(token) {
+        const input = document.getElementById('newPasswordTemplate');
+        const start = input.selectionStart ?? input.value.length;
+        const end = input.selectionEnd ?? input.value.length;
+        input.value = input.value.slice(0, start) + token + input.value.slice(end);
+        input.focus();
+        input.setSelectionRange(start + token.length, start + token.length);
+        updatePasswordPreview();
+    }
+
+    function saveCustomPabx() {
+        const editingName = document.getElementById('editingPabxName').value;
         const name = normalizeCondominioName(document.getElementById('newCondominioName').value);
         const pabx = document.getElementById('newPabxUrl').value.trim();
         const domain = document.getElementById('newDomain').value.trim();
-        const passwordPrefix = document.getElementById('newPasswordPrefix').value.trim();
-        const passwordLogic = document.getElementById('newPasswordLogic').value;
-        const pontoFormat = document.getElementById('newPontoFormat').value;
+        const { password_prefix: passwordPrefix, password_logic: passwordLogic, password_template: passwordTemplate, ponto_format: pontoFormat } = readPasswordForm();
         const warningMessage = document.getElementById('newWarningMessage').value.trim();
+        const templateUsesPrefix = /\{prefixo\}/i.test(passwordTemplate);
 
-        if (!name || !pabx || !domain || !passwordPrefix) {
-            showMessage('Preencha nome, link do PABX, dominio e senha.', 'error');
+        if (!name || !pabx || !domain) {
+            showMessage('Preencha nome, link do PABX e dominio.', 'error');
+            return;
+        }
+
+        if (passwordLogic === 'template') {
+            if (!passwordTemplate) {
+                showMessage('Informe o padrao da senha.', 'error');
+                return;
+            }
+            if (templateUsesPrefix && !passwordPrefix) {
+                showMessage('O padrao usa {prefixo}: preencha o prefixo.', 'error');
+                return;
+            }
+        } else if (!passwordPrefix) {
+            showMessage('Preencha a senha.', 'error');
             return;
         }
 
@@ -437,12 +591,26 @@
         }
 
         const customConfig = loadCustomCondominios();
+
+        if (name !== editingName && customConfig[name]) {
+            showMessage(`Ja existe um PABX adicionado com o nome ${name}.`, 'error');
+            return;
+        }
+
+        if (editingName && editingName !== name) {
+            delete customConfig[editingName];
+        }
+
         customConfig[name] = {
             pabx,
             domain,
             password_prefix: passwordPrefix,
             password_logic: passwordLogic
         };
+
+        if (passwordLogic === 'template') {
+            customConfig[name].password_template = passwordTemplate;
+        }
 
         if (pontoFormat === 'zero_padded') {
             customConfig[name].ponto_format = 'zero_padded';
@@ -454,15 +622,27 @@
 
         if (!saveCustomCondominios(customConfig)) return;
 
-        document.getElementById('condominioSearch').value = name;
-        document.getElementById('condominioSelected').value = name;
+        const selected = document.getElementById('condominioSelected').value;
+        if (!editingName || selected === editingName) {
+            document.getElementById('condominioSearch').value = name;
+            document.getElementById('condominioSelected').value = name;
+        }
+
         clearAddPabxForm();
         renderCustomPabxList();
+
+        if (editingName) {
+            showMessage('PABX atualizado.', 'success');
+            return;
+        }
+
         showGeneratorPage();
         showMessage('PABX adicionado a lista.', 'success');
     }
 
     function removeCustomPabx(name) {
+        if (!confirm(`Remover o PABX ${name}?`)) return;
+
         const customConfig = loadCustomCondominios();
         delete customConfig[name];
 
@@ -471,6 +651,10 @@
         if (document.getElementById('condominioSelected').value === name) {
             document.getElementById('condominioSearch').value = '';
             document.getElementById('condominioSelected').value = '';
+        }
+
+        if (document.getElementById('editingPabxName').value === name) {
+            clearAddPabxForm();
         }
 
         renderCustomPabxList();
@@ -497,6 +681,8 @@
         names.forEach(name => {
             const item = document.createElement('div');
             item.className = 'flex items-center justify-between gap-3 bg-gray-50 border border-gray-200 rounded-md px-3 py-2';
+            item.dataset.name = name;
+            item.classList.toggle('is-editing', document.getElementById('editingPabxName').value === name);
 
             const textWrapper = document.createElement('div');
             textWrapper.className = 'min-w-0';
@@ -509,17 +695,31 @@
             itemDomain.className = 'text-xs text-gray-500 truncate';
             itemDomain.textContent = customConfig[name].domain || '';
 
+            const actions = document.createElement('div');
+            actions.className = 'pabx-actions';
+
+            const editButton = document.createElement('button');
+            editButton.type = 'button';
+            editButton.className = 'pabx-action pabx-edit';
+            editButton.title = 'Editar';
+            editButton.setAttribute('aria-label', `Editar ${name}`);
+            editButton.innerHTML = '<i data-feather="edit-2" class="h-4 w-4"></i>';
+            editButton.addEventListener('click', () => startEditPabx(name));
+
             const removeButton = document.createElement('button');
             removeButton.type = 'button';
-            removeButton.className = 'shrink-0 text-red-600 hover:text-red-800 p-1';
+            removeButton.className = 'pabx-action pabx-remove';
+            removeButton.title = 'Remover';
             removeButton.setAttribute('aria-label', `Remover ${name}`);
             removeButton.innerHTML = '<i data-feather="trash-2" class="h-4 w-4"></i>';
             removeButton.addEventListener('click', () => removeCustomPabx(name));
 
             textWrapper.appendChild(itemName);
             textWrapper.appendChild(itemDomain);
+            actions.appendChild(editButton);
+            actions.appendChild(removeButton);
             item.appendChild(textWrapper);
-            item.appendChild(removeButton);
+            item.appendChild(actions);
             listContainer.appendChild(item);
         });
 
@@ -703,25 +903,11 @@
         // ======================================================
         // LÓGICA DO "ZERO" (ESPECÍFICA PARA RESERVA BARRA FUNDA)
         // ======================================================
-        let pontoFormatted = pontoRaw;
-        if (config.ponto_format === 'zero_padded' || condominioName === "RESERVA BARRA FUNDA" || condominioName === "SERRA MORENA") {
-            // Se for 1 vira 01, se for 2 vira 02.
-            pontoFormatted = pontoRaw.length === 1 ? `0${pontoRaw}` : pontoRaw;
-        }
+        const pontoFormatted = formatPonto(condominioName, config, pontoRaw);
 
-        let senha;
-        const { password_prefix, password_logic } = config;
-    
         // Lógica de Senha
-        switch (password_logic) {
-            case 'fixed':
-                senha = password_prefix;
-                break;
-            default:
-                senha = `${password_prefix}${bloco}${apartamento}${pontoFormatted}`;
-                break;
-        }
-    
+        const senha = buildPassword(config, bloco, apartamento, pontoFormatted);
+
         const usuario = `${bloco}${apartamento}${pontoFormatted}`;
         const dominio = config.domain || "Não disponível";
     
